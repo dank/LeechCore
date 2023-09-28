@@ -306,6 +306,39 @@ typedef struct {
 } FT_60XCONFIGURATION, *PFT_60XCONFIGURATION;
 
 
+struct FT_PIPE_TRANSFER_CONF {
+/* set to true PIPE is not used, default set to FALSE */
+    BOOL fPipeNotUsed;
+/* Enable non thread safe transfer to increase throughput, set this flag
+* if guarantee only single thread access the pipe at a time, default
+* set to FALSE */
+    BOOL fNonThreadSafeTransfer;
+/* Concurrent URB request number, 8 by default, set value < 2 to use
+* default value */
+    BYTE bURBCount;
+/* 256 by default, set value < 2 to use default value */
+    WORD wURBBufferCount;
+/* 32K by default, set value < 512 to use default value */
+    DWORD dwURBBufferSize;
+/* 1G by default, used by FT600 and FT601 only, set 0 to use
+* default value */
+    DWORD dwStreamingSize;
+};
+typedef struct _FT_TRANSFER_CONF {
+/* structure size: sizeof(FT_TRANSFER_CONF) */
+    WORD wStructSize;
+/* Please refer to struture FT_PIPE_TRANSFER_CONF */
+    struct FT_PIPE_TRANSFER_CONF pipe[2];
+/* Stop reading next URB buffer if current buffer is not fully filled,
+* default set to FALSE */
+    BOOL fStopReadingOnURBUnderrun;
+/* Reserved, set to 0 */
+    BOOL fReserved1;
+/* Do not flush device side residue buffer after reopen the
+* device, default set to FALSE */
+    BOOL fKeepDeviceSideBufferAfterReopen;
+} FT_TRANSFER_CONF;
+
 
 //-------------------------------------------------------------------------------
 // TLP defines and functionality below:
@@ -805,6 +838,8 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
     ULONG(WINAPI *pfnFT_GetChipConfiguration)(HANDLE ftHandle, PVOID pvConfiguration);
     ULONG(WINAPI *pfnFT_SetChipConfiguration)(HANDLE ftHandle, PVOID pvConfiguration);
     ULONG(WINAPI *pfnFT_SetSuspendTimeout)(HANDLE ftHandle, ULONG Timeout);
+    ULONG(WINAPI *pfnFT_SetTransferParams)(FT_TRANSFER_CONF *pConf, DWORD dwFifoID);
+    ULONG(WINAPI *pfnFT_SetStreamPipe)(HANDLE ftHandle, BOOL bAllWritePipes, BOOL bAllReadPipes, UCHAR ucPipeID, ULONG ulStreamSize);
     FT_60XCONFIGURATION oCfgNew, oCfgOld;
     if(DeviceFPGA_Initialize_LinuxMultiHandle_LockCheck(ctx->qwDeviceIndex)) {
         szErrorReason = "FPGA linux handle already open";
@@ -850,8 +885,10 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
     ctx->dev.pfnFT_ReleaseOverlapped = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED))
         GetProcAddress(ctx->dev.hModule, "FT_ReleaseOverlapped");
 //    pfnFT_GetChipConfiguration = (ULONG(WINAPI*)(HANDLE, PVOID))GetProcAddress(ctx->dev.hModule, "FT_GetChipConfiguration");
-//    pfnFT_SetChipConfiguration = (ULONG(WINAPI*)(HANDLE, PVOID))GetProcAddress(ctx->dev.hModule, "FT_SetChipConfiguration");
+    pfnFT_SetChipConfiguration = (ULONG(WINAPI*)(HANDLE, PVOID))GetProcAddress(ctx->dev.hModule, "FT_SetChipConfiguration");
 //    pfnFT_SetSuspendTimeout = (ULONG(WINAPI*)(HANDLE, ULONG))GetProcAddress(ctx->dev.hModule, "FT_SetSuspendTimeout");
+    pfnFT_SetTransferParams = (ULONG(WINAPI*)(FT_TRANSFER_CONF*, DWORD))GetProcAddress(ctx->dev.hModule, "FT_SetTransferParams");
+    pfnFT_SetStreamPipe = (ULONG(WINAPI*)(HANDLE, BOOL, BOOL, UCHAR, ULONG))GetProcAddress(ctx->dev.hModule, "FT_SetStreamPipe");
     if(!ctx->dev.pfnFT_Create || !ctx->dev.pfnFT_ReadPipe || !ctx->dev.pfnFT_WritePipe) {
         szErrorReason = ctx->dev.pfnFT_ReadPipe ?
             "Unable to retrieve required functions from FTD3XX.dll" :
@@ -859,6 +896,20 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
         goto fail;
     }
     // Open FTDI
+
+    FT_TRANSFER_CONF conf;
+    memset(&conf, 0, sizeof(FT_TRANSFER_CONF));
+    conf.wStructSize = sizeof(FT_TRANSFER_CONF);
+    pfnFT_SetTransferParams(&conf, 0);
+
+//    FT_TRANSFER_CONF disabledConf;
+//    memset(&disabledConf, 0, sizeof(FT_TRANSFER_CONF));
+//    disabledConf.wStructSize = sizeof(FT_TRANSFER_CONF);
+//    disabledConf.pipe[0/*FT_PIPE_DIR_IN*/].fPipeNotUsed = TRUE;
+//    disabledConf.pipe[1/*FT_PIPE_DIR_OUT*/].fPipeNotUsed = TRUE;
+//    for (DWORD i = 1; i < 4; i++)
+//        pfnFT_SetTransferParams(&disabledConf, i);
+
     status = ctx->dev.pfnFT_Create((PVOID)ctx->qwDeviceIndex, 0x10 /*FT_OPEN_BY_INDEX*/, &ctx->dev.hFTDI);
     if(status || !ctx->dev.hFTDI) {
         szErrorReason = "Unable to connect to USB/FT601 device";
@@ -874,9 +925,9 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
 //        goto fail;
 //    }
 //    memcpy(&oCfgNew, &oCfgOld, sizeof(FT_60XCONFIGURATION));
-//    oCfgNew.FIFOMode = 0; // FIFO MODE FT245
-//    oCfgNew.ChannelConfig = 2; // 1 CHANNEL ONLY
-//    oCfgNew.OptionalFeatureSupport = 0;
+    oCfgNew.FIFOMode = 0; // FIFO MODE FT245
+    oCfgNew.ChannelConfig = 2; // 1 CHANNEL ONLY
+    oCfgNew.OptionalFeatureSupport = 0;
 //    if(memcmp(&oCfgNew, &oCfgOld, sizeof(FT_60XCONFIGURATION))) {
 //        printf(
 //            "IMPORTANT NOTE! FTDI FT601 USB CONFIGURATION DIFFERS FROM RECOMMENDED\n" \
@@ -892,11 +943,11 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
 //            }
 //
 //        }
-//        status = pfnFT_SetChipConfiguration(ctx->dev.hFTDI, &oCfgNew);
-//        if(status) {
-//            szErrorReason = "Unable to set required device configuration";
-//            goto fail;
-//        }
+        status = pfnFT_SetChipConfiguration(ctx->dev.hFTDI, &oCfgNew);
+        if(status) {
+            szErrorReason = "Unable to set required device configuration";
+            goto fail;
+        }
 //        printf("FTDI USB CONFIGURATION UPDATED - RESETTING AND CONTINUING ...\n");
 //        ctx->dev.pfnFT_Close(ctx->dev.hFTDI);
 //        FreeLibrary(ctx->dev.hModule);
@@ -906,7 +957,9 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
 //        return DeviceFPGA_InitializeFT601(ctx);
 //    }
     ctx->async2.fEnabled = ctx->dev.pfnFT_GetOverlappedResult && ctx->dev.pfnFT_InitializeOverlapped && ctx->dev.pfnFT_ReleaseOverlapped && !ctx->dev.pfnFT_InitializeOverlapped(ctx->dev.hFTDI, &ctx->async2.oOverlapped);
-    printf("ASYNC %i\n", ctx->async2.fEnabled);
+    printf("ASYNC %i %p %p\n", ctx->async2.fEnabled, ctx->dev.hFTDI, ctx->async2.oOverlapped.hEvent);
+//    pfnFT_SetStreamPipe(ctx->dev.hFTDI, FALSE, FALSE, 0, 0x10000);
+
     ctx->dev.fInitialized = TRUE;
     DeviceFPGA_Initialize_LinuxMultiHandle_LockAcquire(ctx->qwDeviceIndex);
     return NULL;
