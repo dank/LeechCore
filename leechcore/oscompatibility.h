@@ -59,7 +59,19 @@ typedef uint32_t                            DWORD, *PDWORD, ULONG, *PULONG;
 typedef long long unsigned int              QWORD, *PQWORD, ULONG64, *PULONG64;
 typedef uint64_t                            LARGE_INTEGER, *PLARGE_INTEGER, FILETIME;
 typedef size_t                              SIZE_T, *PSIZE_T;
-typedef void                                *OVERLAPPED, *LPOVERLAPPED;
+//typedef void                                *OVERLAPPED, *LPOVERLAPPED;
+typedef struct _OVERLAPPED {
+    DWORD Internal;
+    DWORD InternalHigh;
+    union {
+        struct{
+            DWORD Offset;
+            DWORD OffsetHigh;
+        };
+        PVOID  Pointer;
+    };
+    HANDLE hEvent;
+} OVERLAPPED, *LPOVERLAPPED;
 typedef struct tdEXCEPTION_RECORD32         { CHAR sz[80]; } EXCEPTION_RECORD32;
 typedef struct tdEXCEPTION_RECORD64         { CHAR sz[152]; } EXCEPTION_RECORD64;
 typedef int(*_CoreCrtNonSecureSearchSortCompareFunction)(void const *, void const *);
