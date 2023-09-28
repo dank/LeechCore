@@ -33,7 +33,7 @@
 #ifdef _WIN32
 #define DEVICE_FPGA_FT601_LIBRARY          "FTD3XX.dll"
 #else
-#define DEVICE_FPGA_FT601_LIBRARY          "leechcore_ft601_driver_linux.so"
+#define DEVICE_FPGA_FT601_LIBRARY          "libftd3xx.so"
 #endif /* _WIN32 */
 
 #define ENDIAN_SWAP_DWORD(x)    (x = (x << 24) | ((x >> 8) & 0xff00) | ((x << 8) & 0xff0000) | (x >> 24))
@@ -221,7 +221,7 @@ typedef struct tdDEVICE_CONTEXT_FPGA {
             PUCHAR pucBuffer,
             ULONG ulBufferLength,
             PULONG pulBytesTransferred,
-            LPOVERLAPPED pOverlapped
+            DWORD dwTimeoutInMs
             );
         ULONG(WINAPI *pfnFT_ReadPipe)(
             HANDLE ftHandle,
@@ -229,7 +229,7 @@ typedef struct tdDEVICE_CONTEXT_FPGA {
             PUCHAR pucBuffer,
             ULONG ulBufferLength,
             PULONG pulBytesTransferred,
-            LPOVERLAPPED pOverlapped
+            DWORD dwTimeoutInMs
             );
         ULONG(WINAPI *pfnFT_AbortPipe)(
             HANDLE ftHandle,
@@ -747,8 +747,8 @@ LPSTR DeviceFPGA_InitializeUDP(_In_ PDEVICE_CONTEXT_FPGA ctx, _In_ DWORD dwIpv4A
     ctx->dev.pfnFT_AbortPipe = DeviceFPGA_UDP_FT60x_FT_AbortPipe;
     ctx->dev.pfnFT_Create = NULL;
     ctx->dev.pfnFT_Close = DeviceFPGA_UDP_FT60x_FT_Close;
-    ctx->dev.pfnFT_ReadPipe = DeviceFPGA_UDP_FT60x_FT_ReadPipe;
-    ctx->dev.pfnFT_WritePipe = DeviceFPGA_UDP_FT60x_FT_WritePipe;
+//    ctx->dev.pfnFT_ReadPipe = DeviceFPGA_UDP_FT60x_FT_ReadPipe;
+//    ctx->dev.pfnFT_WritePipe = DeviceFPGA_UDP_FT60x_FT_WritePipe;
     ctx->dev.fInitialized = TRUE;
     return NULL;
 }
@@ -796,11 +796,11 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
     }
     // Load FTDI Library
     ctx->dev.hModule = LoadLibraryA(DEVICE_FPGA_FT601_LIBRARY);
-    if(!ctx->dev.hModule) {
-        Util_GetPathLib(szModuleFTDI);
-        strcat_s(szModuleFTDI, sizeof(szModuleFTDI) - 1, DEVICE_FPGA_FT601_LIBRARY);
-        ctx->dev.hModule = LoadLibraryA(szModuleFTDI);
-    }
+//    if(!ctx->dev.hModule) {
+//        Util_GetPathLib(szModuleFTDI);
+//        strcat_s(szModuleFTDI, sizeof(szModuleFTDI) - 1, DEVICE_FPGA_FT601_LIBRARY);
+//        ctx->dev.hModule = LoadLibraryA(szModuleFTDI);
+//    }
     if(!ctx->dev.hModule) {
         szErrorReason = "Unable to load "DEVICE_FPGA_FT601_LIBRARY;
         goto fail;
@@ -811,27 +811,27 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
         GetProcAddress(ctx->dev.hModule, "FT_Create");
     ctx->dev.pfnFT_Close = (ULONG(WINAPI*)(HANDLE))
         GetProcAddress(ctx->dev.hModule, "FT_Close");
-    ctx->dev.pfnFT_ReadPipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
+    ctx->dev.pfnFT_ReadPipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, DWORD))
         GetProcAddress(ctx->dev.hModule, "FT_ReadPipeEx");
-    if(!ctx->dev.pfnFT_ReadPipe) {
-        ctx->dev.pfnFT_ReadPipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
-            GetProcAddress(ctx->dev.hModule, "FT_ReadPipe");
-    }
-    ctx->dev.pfnFT_WritePipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
+//    if(!ctx->dev.pfnFT_ReadPipe) {
+//        ctx->dev.pfnFT_ReadPipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
+//            GetProcAddress(ctx->dev.hModule, "FT_ReadPipe");
+//    }
+    ctx->dev.pfnFT_WritePipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, DWORD))
         GetProcAddress(ctx->dev.hModule, "FT_WritePipeEx");
-    if(!ctx->dev.pfnFT_WritePipe) {
-        ctx->dev.pfnFT_WritePipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
-            GetProcAddress(ctx->dev.hModule, "FT_WritePipe");
-    }
-    ctx->dev.pfnFT_GetOverlappedResult = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED, PULONG, BOOL))
-        GetProcAddress(ctx->dev.hModule, "FT_GetOverlappedResult");
-    ctx->dev.pfnFT_InitializeOverlapped = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED))
-        GetProcAddress(ctx->dev.hModule, "FT_InitializeOverlapped");
-    ctx->dev.pfnFT_ReleaseOverlapped = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED))
-        GetProcAddress(ctx->dev.hModule, "FT_ReleaseOverlapped");
-    pfnFT_GetChipConfiguration = (ULONG(WINAPI*)(HANDLE, PVOID))GetProcAddress(ctx->dev.hModule, "FT_GetChipConfiguration");
-    pfnFT_SetChipConfiguration = (ULONG(WINAPI*)(HANDLE, PVOID))GetProcAddress(ctx->dev.hModule, "FT_SetChipConfiguration");
-    pfnFT_SetSuspendTimeout = (ULONG(WINAPI*)(HANDLE, ULONG))GetProcAddress(ctx->dev.hModule, "FT_SetSuspendTimeout");
+//    if(!ctx->dev.pfnFT_WritePipe) {
+//        ctx->dev.pfnFT_WritePipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
+//            GetProcAddress(ctx->dev.hModule, "FT_WritePipe");
+//    }
+//    ctx->dev.pfnFT_GetOverlappedResult = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED, PULONG, BOOL))
+//        GetProcAddress(ctx->dev.hModule, "FT_GetOverlappedResult");
+//    ctx->dev.pfnFT_InitializeOverlapped = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED))
+//        GetProcAddress(ctx->dev.hModule, "FT_InitializeOverlapped");
+//    ctx->dev.pfnFT_ReleaseOverlapped = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED))
+//        GetProcAddress(ctx->dev.hModule, "FT_ReleaseOverlapped");
+//    pfnFT_GetChipConfiguration = (ULONG(WINAPI*)(HANDLE, PVOID))GetProcAddress(ctx->dev.hModule, "FT_GetChipConfiguration");
+//    pfnFT_SetChipConfiguration = (ULONG(WINAPI*)(HANDLE, PVOID))GetProcAddress(ctx->dev.hModule, "FT_SetChipConfiguration");
+//    pfnFT_SetSuspendTimeout = (ULONG(WINAPI*)(HANDLE, ULONG))GetProcAddress(ctx->dev.hModule, "FT_SetSuspendTimeout");
     if(!ctx->dev.pfnFT_Create || !ctx->dev.pfnFT_ReadPipe || !ctx->dev.pfnFT_WritePipe) {
         szErrorReason = ctx->dev.pfnFT_ReadPipe ?
             "Unable to retrieve required functions from FTD3XX.dll" :
@@ -844,50 +844,48 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
         szErrorReason = "Unable to connect to USB/FT601 device";
         goto fail;
     }
-    ctx->dev.pfnFT_AbortPipe(ctx->dev.hFTDI, 0x02);
-    ctx->dev.pfnFT_AbortPipe(ctx->dev.hFTDI, 0x82);
-    pfnFT_SetSuspendTimeout(ctx->dev.hFTDI, 0);
+    ctx->dev.pfnFT_AbortPipe(ctx->dev.hFTDI, 0);
+//    ctx->dev.pfnFT_AbortPipe(ctx->dev.hFTDI, 0x82);
+//    pfnFT_SetSuspendTimeout(ctx->dev.hFTDI, 0);
     // Check FTDI chip configuration and update if required
-    status = pfnFT_GetChipConfiguration(ctx->dev.hFTDI, &oCfgOld);
-    if(status) {
-        szErrorReason = "Unable to retrieve device configuration";
-        goto fail;
-    }
-    memcpy(&oCfgNew, &oCfgOld, sizeof(FT_60XCONFIGURATION));
-    oCfgNew.FIFOMode = 0; // FIFO MODE FT245
-    oCfgNew.ChannelConfig = 2; // 1 CHANNEL ONLY
-    oCfgNew.OptionalFeatureSupport = 0;
-    if(memcmp(&oCfgNew, &oCfgOld, sizeof(FT_60XCONFIGURATION))) {
-        printf(
-            "IMPORTANT NOTE! FTDI FT601 USB CONFIGURATION DIFFERS FROM RECOMMENDED\n" \
-            "PLEASE ENSURE THAT ONLY PCILEECH FPGA FTDI FT601 DEVICE IS CONNECED  \n" \
-            "BEFORE UPDATING CONFIGURATION. DO YOU WISH TO CONTINUE Y/N?          \n"
-        );
-        while(TRUE) {
-            c = (CHAR)getchar();
-            if(c == 'Y' || c == 'y') { break; }
-            if(c == 'N' || c == 'n') {
-                szErrorReason = "User abort required device configuration";
-                goto fail;
-            }
-
-        }
-        status = pfnFT_SetChipConfiguration(ctx->dev.hFTDI, &oCfgNew);
-        if(status) {
-            szErrorReason = "Unable to set required device configuration";
-            goto fail;
-        }
-        printf("FTDI USB CONFIGURATION UPDATED - RESETTING AND CONTINUING ...\n");
-        ctx->dev.pfnFT_Close(ctx->dev.hFTDI);
-        FreeLibrary(ctx->dev.hModule);
-        ctx->dev.hModule = NULL;
-        ctx->dev.hFTDI = NULL;
-        Sleep(3000);
-        return DeviceFPGA_InitializeFT601(ctx);
-    }
-    ctx->async2.fEnabled =
-        ctx->dev.pfnFT_GetOverlappedResult && ctx->dev.pfnFT_InitializeOverlapped && ctx->dev.pfnFT_ReleaseOverlapped &&
-        !ctx->dev.pfnFT_InitializeOverlapped(ctx->dev.hFTDI, &ctx->async2.oOverlapped);
+//    status = pfnFT_GetChipConfiguration(ctx->dev.hFTDI, &oCfgOld);
+//    if(status) {
+//        szErrorReason = "Unable to retrieve device configuration";
+//        goto fail;
+//    }
+//    memcpy(&oCfgNew, &oCfgOld, sizeof(FT_60XCONFIGURATION));
+//    oCfgNew.FIFOMode = 0; // FIFO MODE FT245
+//    oCfgNew.ChannelConfig = 2; // 1 CHANNEL ONLY
+//    oCfgNew.OptionalFeatureSupport = 0;
+//    if(memcmp(&oCfgNew, &oCfgOld, sizeof(FT_60XCONFIGURATION))) {
+//        printf(
+//            "IMPORTANT NOTE! FTDI FT601 USB CONFIGURATION DIFFERS FROM RECOMMENDED\n" \
+//            "PLEASE ENSURE THAT ONLY PCILEECH FPGA FTDI FT601 DEVICE IS CONNECED  \n" \
+//            "BEFORE UPDATING CONFIGURATION. DO YOU WISH TO CONTINUE Y/N?          \n"
+//        );
+//        while(TRUE) {
+//            c = (CHAR)getchar();
+//            if(c == 'Y' || c == 'y') { break; }
+//            if(c == 'N' || c == 'n') {
+//                szErrorReason = "User abort required device configuration";
+//                goto fail;
+//            }
+//
+//        }
+//        status = pfnFT_SetChipConfiguration(ctx->dev.hFTDI, &oCfgNew);
+//        if(status) {
+//            szErrorReason = "Unable to set required device configuration";
+//            goto fail;
+//        }
+//        printf("FTDI USB CONFIGURATION UPDATED - RESETTING AND CONTINUING ...\n");
+//        ctx->dev.pfnFT_Close(ctx->dev.hFTDI);
+//        FreeLibrary(ctx->dev.hModule);
+//        ctx->dev.hModule = NULL;
+//        ctx->dev.hFTDI = NULL;
+//        Sleep(3000);
+//        return DeviceFPGA_InitializeFT601(ctx);
+//    }
+    ctx->async2.fEnabled = FALSE;
     ctx->dev.fInitialized = TRUE;
     DeviceFPGA_Initialize_LinuxMultiHandle_LockAcquire(ctx->qwDeviceIndex);
     return NULL;
@@ -1011,8 +1009,8 @@ LPSTR DeviceFPGA_InitializeFT2232(_In_ PDEVICE_CONTEXT_FPGA ctx)
     // Assign FT601 compatibility functions to device object:
     ctx->dev.pfnFT_AbortPipe = DeviceFPGA_FT2232_FT60x_FT_AbortPipe;
     ctx->dev.pfnFT_Close = DeviceFPGA_FT2232_FT60x_FT_Close;
-    ctx->dev.pfnFT_ReadPipe = DeviceFPGA_FT2232_FT60x_FT_ReadPipe;
-    ctx->dev.pfnFT_WritePipe = DeviceFPGA_FT2232_FT60x_FT_WritePipe;
+//    ctx->dev.pfnFT_ReadPipe = DeviceFPGA_FT2232_FT60x_FT_ReadPipe;
+//    ctx->dev.pfnFT_WritePipe = DeviceFPGA_FT2232_FT60x_FT_WritePipe;
     // Allocate and assign "extended" ftHandle to device object [free by pfnFT_Close()].
     // Also assign required function pointers.
     if(!(hFT2232H = LocalAlloc(LMEM_ZEROINIT, sizeof(FT2232H_HANDLE)))) {
@@ -1169,18 +1167,18 @@ BOOL DeviceFPGA_ConfigRead(_In_ PDEVICE_CONTEXT_FPGA ctx, _In_ WORD wBaseAddr, _
         pbRxTx[cbRxTx + 7] = 0x77;
         cbRxTx += 8;
         if(cbRxTx >= 0x3f0) {
-            status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbRxTx, cbRxTx, &cbRxTx, NULL);
+            status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbRxTx, cbRxTx, &cbRxTx, 10000);
             if(status) { goto fail; }
             cbRxTx = 0;
         }
     }
     if(cbRxTx) {
-        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbRxTx, cbRxTx, &cbRxTx, NULL);
+        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbRxTx, cbRxTx, &cbRxTx, 10000);
         if(status) { goto fail; }
     }
     Sleep(10);
     // READ and interpret result
-    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, pbRxTx, 0x20000, &cbRxTx, NULL);
+    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, pbRxTx, 0x20000, &cbRxTx, 10000);
     if(status) { goto fail; }
     ZeroMemory(pb, cb);
     for(i = 0; i < cbRxTx; i += 32) {
@@ -1239,7 +1237,7 @@ BOOL DeviceFPGA_ConfigWriteEx(_In_ PDEVICE_CONTEXT_FPGA ctx, _In_ WORD wBaseAddr
     pbTx[5] = wBaseAddr & 0xff;                     // [5] = addr_low
     pbTx[6] = 0x20 | (flags & 0x03);                // [6] = target = bit[0:1], read = bit[4], write = bit[5]
     pbTx[7] = 0x77;                                 // [7] = MAGIC 0x77
-    status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbTx, 8, &cbTx, NULL);
+    status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbTx, 8, &cbTx, 10000);
     return (status == 0);
 }
 
@@ -1286,13 +1284,13 @@ BOOL DeviceFPGA_ConfigWrite(_In_ PDEVICE_CONTEXT_FPGA ctx, _In_ WORD wBaseAddr, 
         pbTx[cbTx + 7] = 0x77;                          // [7] = MAGIC 0x77
         cbTx += 8;
         if(cbTx >= 0x3f0) {
-            status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbTx, cbTx, &cbTx, NULL);
+            status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbTx, cbTx, &cbTx, 10000);
             if(status) { return FALSE; }
             cbTx = 0;
         }
     }
     if(cbTx) {
-        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbTx, cbTx, &cbTx, NULL);
+        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbTx, cbTx, &cbTx, 10000);
         if(status) { return FALSE; }
     }
     return TRUE;
@@ -1354,11 +1352,11 @@ BOOL DeviceFPGA_PCIeCfgSpaceCoreRead(_In_ PDEVICE_CONTEXT_FPGA ctx, _Out_writes_
             if(raSingleDW) { break; }
         }
         // WRITE TxData
-        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbRxTx, cbRxTx, &cbRxTx, NULL);
+        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbRxTx, cbRxTx, &cbRxTx, 10000);
         if(status) { return FALSE; }
         Sleep(10);
         // READ and interpret result
-        status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, pbRxTx, 0x1000, &cbRxTx, NULL);
+        status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, pbRxTx, 0x1000, &cbRxTx, 10000);
         if(status) { return FALSE; }
         for(i = 0; i < cbRxTx; i += 32) {
             while(*(PDWORD)(pbRxTx + i) == 0x55556666) { // skip over ftdi workaround dummy fillers
@@ -1445,7 +1443,7 @@ BOOL DeviceFPGA_PCIeCfgSpaceCoreWriteDWORD(_In_ PDEVICE_CONTEXT_FPGA ctx, _In_ D
     memcpy(pbRxTx + cbRxTx, pbTxWriteEnable, 8); cbRxTx += 8;   // write/enable bit
     memcpy(pbRxTx + cbRxTx, pbTxLockDisable, 8); cbRxTx += 8;   // disable read/write lock
     // WRITE TxData
-    status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbRxTx, cbRxTx, &cbRxTx, NULL);
+    status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbRxTx, cbRxTx, &cbRxTx, 10000);
     return status ? FALSE : TRUE;
 }
 
@@ -1508,11 +1506,11 @@ BOOL DeviceFPGA_PCIeDrpRead(_In_ PDEVICE_CONTEXT_FPGA ctx, _Out_writes_(0x100) P
             memcpy(pbRxTx + cbRxTx, pbTxResultData, 8); cbRxTx += 8;
         }
         // WRITE TxData
-        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbRxTx, cbRxTx, &cbRxTx, NULL);
+        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbRxTx, cbRxTx, &cbRxTx, 10000);
         if(status) { return FALSE; }
         Sleep(10);
         // READ and interpret result
-        status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, pbRxTx, 0x1000, &cbRxTx, NULL);
+        status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, pbRxTx, 0x1000, &cbRxTx, 10000);
         if(status) { return FALSE; }
         for(i = 0; i < cbRxTx; i += 32) {
             while(*(PDWORD)(pbRxTx + i) == 0x55556666) { // skip over ftdi workaround dummy fillers
@@ -1600,16 +1598,16 @@ BOOL DeviceFPGA_GetSetPHYv3(_In_ PDEVICE_CONTEXT_FPGA ctx, _In_ BOOL isUpdate)
         ctx->phy.tp_cfg = 1;
         ctx->phy.tp = 4;
         *(PQWORD)pbTx = _byteswap_uint64(*(PQWORD)&ctx->phy);
-        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbTx, sizeof(pbTx), &cbRxTx, NULL);
+        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbTx, sizeof(pbTx), &cbRxTx, 10000);
         if(status) { return FALSE; }
         Sleep(10);
     }
     *(PQWORD)&ctx->phy = 0;
     *(PQWORD)pbTx = 0x7731000000000000; // phy read (3) + cfg (1) + magic (77)
-    status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbTx, sizeof(pbTx), &cbRxTx, NULL);
+    status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbTx, sizeof(pbTx), &cbRxTx, 10000);
     if(status) { return FALSE; }
     Sleep(10);
-    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, pbRx, 0x1000, &cbRxTx, NULL);
+    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, pbRx, 0x1000, &cbRxTx, 10000);
     if(status) { return FALSE; }
     for(i = 0; i < cbRxTx; i += 32) {
         while(*(PDWORD)(pbRx + i) == 0x55556666) { // skip over ftdi workaround dummy fillers
@@ -1695,13 +1693,13 @@ VOID DeviceFPGA_GetDeviceId_FpgaVersion_ClearPipe(_In_ PDEVICE_CONTEXT_FPGA ctx)
         DeviceFPGA_ReInitializeFTDI(ctx);
     }
     if(!(pbRX = LocalAlloc(0, 0x00100000))) { return; }
-    status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbTX_Dummy, sizeof(pbTX_Dummy), &cbTX, NULL);
+    status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbTX_Dummy, sizeof(pbTX_Dummy), &cbTX, 10000);
     if(status) { goto fail; }
     Sleep(25);
-    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, pbRX, 0x1000, &cbRX, NULL);
+    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, pbRX, 0x1000, &cbRX, 10000);
     if(status) { goto fail; }
     if(cbRX >= 0x1000) {
-        status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, pbRX, 0x00100000, &cbRX, NULL);
+        status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, pbRX, 0x00100000, &cbRX, 10000);
         if(!status && cbRX == 0x00100000) {
             // Sometimes the PCIe core locks up at unclean exits from PCILeech
             // causing things to stop work - including spamming output FIFOs
@@ -1766,10 +1764,10 @@ BYTE pbTX[] = {
     0x00, 0x00, 0x00, 0x00,  0x03, 0x00, 0x03, 0x77
 };
 // Write and read data from device.
-status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, pbTX, sizeof(pbTX), &cbTX, NULL);
+status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, pbTX, sizeof(pbTX), &cbTX, 10000);
 if(status) { return; }
 Sleep(10);
-status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, pbRX, sizeof(pbRX), &cbRX, NULL);
+status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, pbRX, sizeof(pbRX), &cbRX, 10000);
 if(status) { return; }
 // Interpret read data
 for(i = 0; i < cbRX; i += 32) {
@@ -2087,10 +2085,10 @@ BOOL DeviceFPGA_TxTlp(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_CONTEXT_FPGA ctx, _In
     ctx->txbuf.cb += cbTx;
     // transmit
     if((ctx->txbuf.cb >= ctx->perf.MAX_SIZE_TX) || (fFlush && ctx->txbuf.cb)) {
-        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, ctx->txbuf.pb, ctx->txbuf.cb, &cbTxed, NULL);
+        status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, ctx->txbuf.pb, ctx->txbuf.cb, &cbTxed, 10000);
         if(status == 0x20) {
             DeviceFPGA_ReInitializeFTDI(ctx); // try recovery if possible.
-            status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0x02, ctx->txbuf.pb, ctx->txbuf.cb, &cbTxed, NULL);
+            status = ctx->dev.pfnFT_WritePipe(ctx->dev.hFTDI, 0, ctx->txbuf.pb, ctx->txbuf.cb, &cbTxed, 10000);
         }
         ctx->txbuf.cb = 0;
         usleep(ctx->perf.DELAY_WRITE);
@@ -2137,13 +2135,13 @@ VOID DeviceFPGA_Synch_RxTlpSynchronous(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_CONT
     cbReadRxBuf = min(cbReadRxBuf, 0x00100000);
     while(TRUE) {
         // read data:
-        status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, ctx->rxbuf.pb + ctx->rxbuf.cb, cbReadRxBuf - ctx->rxbuf.cb, &cbRx, NULL);
+        status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, cbReadRxBuf - ctx->rxbuf.cb, &cbRx, 10000);
         if(status == 0x20 && ctx->perf.RETRY_ON_ERROR) {
             DeviceFPGA_ReInitializeFTDI(ctx); // try recovery if possible.
-            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, ctx->rxbuf.pb + ctx->rxbuf.cb, ctx->rxbuf.cbMax - ctx->rxbuf.cb, &cbRx, NULL);
+            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, ctx->rxbuf.cbMax - ctx->rxbuf.cb, &cbRx, 10000);
         }
         if(status) {
-            ctx->dev.pfnFT_AbortPipe(ctx->dev.hFTDI, 0x82);
+            ctx->dev.pfnFT_AbortPipe(ctx->dev.hFTDI, 0);
             return;
         }
         ctx->rxbuf.cb += cbRx;
@@ -2676,7 +2674,7 @@ VOID DeviceFPGA_Async2_ReadScatter_DoWork(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_C
     // RX INITIAL / (LATENCY OPTIMIZED FOR SMALLER READS):
     usleep(5);
     cbReadInitialMax = min(DEVICE_FPGA_ASYNC2_MAXREADSIZE, pMemCtxPrimary->cMEM * 0x1800);
-    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, ctx->rxbuf.pb + ctx->rxbuf.cb, cbReadInitialMax, &cbRead, NULL);
+    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, cbReadInitialMax, &cbRead, 10000);
     if(status && (status != FT_IO_PENDING)) {
         return;
     }
@@ -2704,7 +2702,7 @@ VOID DeviceFPGA_Async2_ReadScatter_DoWork(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_C
         }
         // START OVERLAPPED READ:
         if(fAsync) {
-            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, &ctx->async2.oOverlapped);
+            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, &ctx->async2.oOverlapped);
             if(status && (status != FT_IO_PENDING)) {
                 goto fail_overlapped;
             }
@@ -2719,7 +2717,7 @@ VOID DeviceFPGA_Async2_ReadScatter_DoWork(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_C
         if(fAsync) {
             status = ctx->dev.pfnFT_GetOverlappedResult(ctx->dev.hFTDI, &ctx->async2.oOverlapped, &cbRead, TRUE);
         } else {
-            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, ctx->rxbuf.pb + ctx->rxbuf.cb, cbReadInitialMax, &cbRead, NULL);
+            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, cbReadInitialMax, &cbRead, 10000);
         }
         if(status) { goto fail_overlapped; }
         ctx->rxbuf.cb += cbRead;
@@ -2755,7 +2753,7 @@ VOID DeviceFPGA_Async2_ReadOnlyFast_DoWork(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_
     BOOL fAsync = !ctx->dev.f2232h;
     DWORD status, cbRead = 0;
     // RX INITIAL / (LATENCY OPTIMIZED FOR SMALLER READS):
-    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, NULL);
+    status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, 10000);
     if(status && (status != FT_IO_PENDING)) {
         return;
     }
@@ -2777,7 +2775,7 @@ VOID DeviceFPGA_Async2_ReadOnlyFast_DoWork(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_
         }
         // START OVERLAPPED READ:
         if(fAsync) {
-            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, &ctx->async2.oOverlapped);
+            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, &ctx->async2.oOverlapped);
             if(status && (status != FT_IO_PENDING)) {
                 return;
             }
@@ -2788,7 +2786,7 @@ VOID DeviceFPGA_Async2_ReadOnlyFast_DoWork(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_
         if(fAsync) {
             status = ctx->dev.pfnFT_GetOverlappedResult(ctx->dev.hFTDI, &ctx->async2.oOverlapped, &cbRead, TRUE);
         } else {
-            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0x82, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, NULL);
+            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, 10000);
         }
         if(status) { return; }
         ctx->rxbuf.cb += cbRead;
