@@ -223,6 +223,14 @@ typedef struct tdDEVICE_CONTEXT_FPGA {
             PULONG pulBytesTransferred,
             DWORD dwTimeoutInMs
             );
+        ULONG(WINAPI *pfnFT_WritePipeAsync)(
+            HANDLE ftHandle,
+            UCHAR ucPipeID,
+            PUCHAR pucBuffer,
+            ULONG ulBufferLength,
+            PULONG pulBytesTransferred,
+            LPOVERLAPPED pOverlapped
+        );
         ULONG(WINAPI *pfnFT_ReadPipe)(
             HANDLE ftHandle,
             UCHAR ucPipeID,
@@ -231,6 +239,14 @@ typedef struct tdDEVICE_CONTEXT_FPGA {
             PULONG pulBytesTransferred,
             DWORD dwTimeoutInMs
             );
+        ULONG(WINAPI *pfnFT_ReadPipeAsync)(
+            HANDLE ftHandle,
+            UCHAR ucPipeID,
+            PUCHAR pucBuffer,
+            ULONG ulBufferLength,
+            PULONG pulBytesTransferred,
+            LPOVERLAPPED pOverlapped
+        );
         ULONG(WINAPI *pfnFT_AbortPipe)(
             HANDLE ftHandle,
             UCHAR ucPipeID
@@ -811,24 +827,28 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
         GetProcAddress(ctx->dev.hModule, "FT_Create");
     ctx->dev.pfnFT_Close = (ULONG(WINAPI*)(HANDLE))
         GetProcAddress(ctx->dev.hModule, "FT_Close");
+    ctx->dev.pfnFT_ReadPipeAsync = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
+    GetProcAddress(ctx->dev.hModule, "FT_ReadPipeAsync");
     ctx->dev.pfnFT_ReadPipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, DWORD))
         GetProcAddress(ctx->dev.hModule, "FT_ReadPipeEx");
 //    if(!ctx->dev.pfnFT_ReadPipe) {
 //        ctx->dev.pfnFT_ReadPipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
 //            GetProcAddress(ctx->dev.hModule, "FT_ReadPipe");
 //    }
+    ctx->dev.pfnFT_WritePipeAsync = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
+    GetProcAddress(ctx->dev.hModule, "FT_WritePipeAsync");
     ctx->dev.pfnFT_WritePipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, DWORD))
         GetProcAddress(ctx->dev.hModule, "FT_WritePipeEx");
 //    if(!ctx->dev.pfnFT_WritePipe) {
 //        ctx->dev.pfnFT_WritePipe = (ULONG(WINAPI*)(HANDLE, UCHAR, PUCHAR, ULONG, PULONG, LPOVERLAPPED))
 //            GetProcAddress(ctx->dev.hModule, "FT_WritePipe");
 //    }
-//    ctx->dev.pfnFT_GetOverlappedResult = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED, PULONG, BOOL))
-//        GetProcAddress(ctx->dev.hModule, "FT_GetOverlappedResult");
-//    ctx->dev.pfnFT_InitializeOverlapped = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED))
-//        GetProcAddress(ctx->dev.hModule, "FT_InitializeOverlapped");
-//    ctx->dev.pfnFT_ReleaseOverlapped = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED))
-//        GetProcAddress(ctx->dev.hModule, "FT_ReleaseOverlapped");
+    ctx->dev.pfnFT_GetOverlappedResult = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED, PULONG, BOOL))
+        GetProcAddress(ctx->dev.hModule, "FT_GetOverlappedResult");
+    ctx->dev.pfnFT_InitializeOverlapped = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED))
+        GetProcAddress(ctx->dev.hModule, "FT_InitializeOverlapped");
+    ctx->dev.pfnFT_ReleaseOverlapped = (ULONG(WINAPI*)(HANDLE, LPOVERLAPPED))
+        GetProcAddress(ctx->dev.hModule, "FT_ReleaseOverlapped");
 //    pfnFT_GetChipConfiguration = (ULONG(WINAPI*)(HANDLE, PVOID))GetProcAddress(ctx->dev.hModule, "FT_GetChipConfiguration");
 //    pfnFT_SetChipConfiguration = (ULONG(WINAPI*)(HANDLE, PVOID))GetProcAddress(ctx->dev.hModule, "FT_SetChipConfiguration");
 //    pfnFT_SetSuspendTimeout = (ULONG(WINAPI*)(HANDLE, ULONG))GetProcAddress(ctx->dev.hModule, "FT_SetSuspendTimeout");
@@ -885,7 +905,8 @@ LPSTR DeviceFPGA_InitializeFT601(_In_ PDEVICE_CONTEXT_FPGA ctx)
 //        Sleep(3000);
 //        return DeviceFPGA_InitializeFT601(ctx);
 //    }
-    ctx->async2.fEnabled = FALSE;
+    ctx->async2.fEnabled = ctx->dev.pfnFT_GetOverlappedResult && ctx->dev.pfnFT_InitializeOverlapped && ctx->dev.pfnFT_ReleaseOverlapped && !ctx->dev.pfnFT_InitializeOverlapped(ctx->dev.hFTDI, &ctx->async2.oOverlapped);
+    printf("ASYNC %i\n", ctx->async2.fEnabled);
     ctx->dev.fInitialized = TRUE;
     DeviceFPGA_Initialize_LinuxMultiHandle_LockAcquire(ctx->qwDeviceIndex);
     return NULL;
@@ -2702,7 +2723,7 @@ VOID DeviceFPGA_Async2_ReadScatter_DoWork(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_C
         }
         // START OVERLAPPED READ:
         if(fAsync) {
-            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, &ctx->async2.oOverlapped);
+            status = ctx->dev.pfnFT_ReadPipeAsync(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, &ctx->async2.oOverlapped);
             if(status && (status != FT_IO_PENDING)) {
                 goto fail_overlapped;
             }
@@ -2775,7 +2796,7 @@ VOID DeviceFPGA_Async2_ReadOnlyFast_DoWork(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE_
         }
         // START OVERLAPPED READ:
         if(fAsync) {
-            status = ctx->dev.pfnFT_ReadPipe(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, &ctx->async2.oOverlapped);
+            status = ctx->dev.pfnFT_ReadPipeAsync(ctx->dev.hFTDI, 0, ctx->rxbuf.pb + ctx->rxbuf.cb, DEVICE_FPGA_ASYNC2_MAXREADSIZE, &cbRead, &ctx->async2.oOverlapped);
             if(status && (status != FT_IO_PENDING)) {
                 return;
             }
