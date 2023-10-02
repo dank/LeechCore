@@ -2575,7 +2575,7 @@ BOOL DeviceFPGA_Async2_Read_RxTlpFromBuffer(_In_ PLC_CONTEXT ctxLC, _In_ PDEVICE
 */
 VOID DeviceFPGA_WriteScatter(_In_ PLC_CONTEXT ctxLC, _In_ DWORD cpMEMs, _Inout_ PPMEM_SCATTER ppMEMs);
 
-inline BYTE DeviceFPGA_Async2_Read_TxTlp_NextTag(_In_ PDEVICE_CONTEXT_FPGA ctx)
+BYTE DeviceFPGA_Async2_Read_TxTlp_NextTag(_In_ PDEVICE_CONTEXT_FPGA ctx)
 {
     BYTE iTag = ctx->async2.iTag;
     while(TRUE) {
